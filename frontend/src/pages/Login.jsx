@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Box,
   Paper,
@@ -6,92 +6,121 @@ import {
   Button,
   Typography,
   Link,
-  Stack
-} from '@mui/material';
-import { loginUser } from '../services/authService.js';
-import { useAuth } from '../context/AuthContext.jsx';
-import { useNavigate } from 'react-router-dom';
+  Stack,
+  CircularProgress,
+} from "@mui/material";
+import { loginUser } from "../services/authService.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-hot-toast";
 
 const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [form, setForm] = useState({
+    username: "",
+    password: "",
+  });
+
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+
+    setFieldErrors((prev) => ({ ...prev, [e.target.name]: "" }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    try {
-      const userData = await loginUser(username, password);
-      login(userData);
-      setError('');
-      navigate('/dashboard'); // redirect after login
-    } catch (err) {
-      setError('Invalid username or password');
+    setLoading(true);
+    setFieldErrors({});
+
+    const res = await loginUser(form.username, form.password);
+
+    if (!res.success) {
+      toast.error(res.message);
+
+      if (res.errors) {
+        setFieldErrors(res.errors);
+      }
+
+      setLoading(false);
+      return;
     }
+
+    toast.success("Logged in successfully");
+
+    login(res.data);
+    navigate("/dashboard");
+    setLoading(false);
   };
 
   return (
     <Box
       sx={{
-        height: '100vh',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'background.default',
+        height: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "background.default",
       }}
     >
       <Paper sx={{ padding: 4, width: 320 }}>
-        <Typography variant="h5" sx={{ mb: 3, textAlign: 'center' }}>
+        <Typography variant="h5" sx={{ mb: 3, textAlign: "center" }}>
           Login
         </Typography>
 
         <form onSubmit={handleSubmit}>
           <TextField
             label="Username"
+            name="username"
             fullWidth
             required
             sx={{ mb: 2 }}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            value={form.username}
+            onChange={handleChange}
+            error={!!fieldErrors.username}
+            helperText={fieldErrors.username}
           />
 
           <TextField
             label="Password"
+            name="password"
             type="password"
             fullWidth
             required
             sx={{ mb: 1 }}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            value={form.password}
+            onChange={handleChange}
+            error={!!fieldErrors.password}
+            helperText={fieldErrors.password}
           />
 
-          {/* Forgot Password */}
-          <Box sx={{ textAlign: 'right', mb: 2 }}>
+          <Box sx={{ textAlign: "right", mb: 2 }}>
             <Typography
               variant="body2"
               sx={{
-                color: 'text.disabled',
-                cursor: 'not-allowed'
+                color: "text.disabled",
+                cursor: "not-allowed",
               }}
             >
               Forgot Password (Coming Soon)
             </Typography>
           </Box>
 
-          {error && (
-            <Typography color="error" sx={{ mb: 2 }}>
-              {error}
-            </Typography>
-          )}
-
-          <Button type="submit" variant="contained" fullWidth sx={{ mb: 2 }}>
-            Login
+          <Button
+            type="submit"
+            variant="contained"
+            fullWidth
+            sx={{ mb: 2 }}
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={24} /> : "Login"}
           </Button>
         </form>
 
-        {/* Signup */}
         <Stack direction="row" justifyContent="center">
           <Typography variant="body2">
             Don't have an account?
@@ -100,7 +129,7 @@ const Login = () => {
             component="button"
             variant="body2"
             sx={{ ml: 1 }}
-            onClick={() => navigate('/signup')}
+            onClick={() => navigate("/signup")}
           >
             Sign Up
           </Link>
