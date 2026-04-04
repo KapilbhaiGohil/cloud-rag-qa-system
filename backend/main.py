@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from api.auth import router as auth_router
 from api.chat import router as chat_router
 from api.message import router as message_router
+from api.document import router as document_router
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 app = FastAPI(title="FastAPI + MongoDB Auth")
@@ -18,3 +19,4 @@ app.add_middleware(
 app.include_router(chat_router)
 app.include_router(auth_router)
 app.include_router(message_router)
+app.include_router(document_router)

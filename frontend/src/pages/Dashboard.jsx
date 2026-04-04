@@ -28,6 +28,12 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import SendIcon from "@mui/icons-material/Send";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { useAuth } from "../context/AuthContext.jsx";
+import {
+  createDocument,
+  getDocuments,
+  renameDocument as renameDocumentAPI,
+  deleteDocument as deleteDocumentAPI,
+} from "../services/documentService";
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -38,7 +44,8 @@ const Dashboard = () => {
   const [chatDocuments, setChatDocuments] = useState([]);
   const [editingChatId, setEditingChatId] = useState(null);
   const [editingDocId, setEditingDocId] = useState(null);
-  const [newName, setNewName] = useState("");
+  const [chatNewName, setChatNewName] = useState("");
+  const [docNewName, setDocNewName] = useState("");
   const [message, setMessage] = useState("");
   const chatEndRef = useRef(null);
 
@@ -54,7 +61,13 @@ const Dashboard = () => {
       toast.error(res.message);
       return;
     }
-    setChats(res.data?.chats || []);
+    const chatList = res.data?.chats || [];
+    setChats(chatList);
+
+    // if (chatList.length > 0) {
+    //   selectChat(chatList[0]._id);
+    // }
+
   };
   const addChat = async () => {
     const res = await createChat("New Chat");
@@ -65,8 +78,8 @@ const Dashboard = () => {
     }
 
     toast.success("Chat created");
-
-    setChats((prev) => [res.data, ...prev]);
+    selectChat(res.data._id);
+    setChats((prev) => [...prev, res.data]);
   };
   const deleteChat = async (id) => {
     const res = await deleteChatAPI(id);
@@ -95,22 +108,17 @@ const Dashboard = () => {
     }
 
     setChatMessages(res.data.messages);
+    const docsRes = await getDocuments(chatId);
 
-    // Dummy documents for now
-    const dummyDocuments = [
-      { id: 1, name: "Example.pdf" },
-      { id: 2, name: "Notes.docx" },
-    ];
-    setChatDocuments(dummyDocuments);
+    if (!docsRes.success) {
+      toast.error(docsRes.message);
+      return;
+    }
 
-    // In future, fetch real messages & documents:
-    // const res = await getChatMessages(chatId);
-    // if(res.success) setChatMessages(res.data.messages);
-    // const docsRes = await getChatDocuments(chatId);
-    // if(docsRes.success) setChatDocuments(docsRes.data.documents);
+    setChatDocuments(docsRes.data.documents);
   };
   const renameChat = async (id) => {
-    const res = await renameChatAPI(id, newName);
+    const res = await renameChatAPI(id, chatNewName);
 
     if (!res.success) {
       toast.error(res.message);
@@ -121,27 +129,71 @@ const Dashboard = () => {
 
     setChats((prev) =>
       prev.map((c) =>
-        c._id === id ? { ...c, name: newName } : c
+        c._id === id ? { ...c, name: chatNewName } : c
       )
     );
 
     setEditingChatId(null);
-    setNewName("");
+    setChatNewName("");
   };
-  const addDocument = (file) => {
-    setChatDocuments((prev) => [...prev, { id: Date.now(), name: file.name }]);
+  const addDocument = async (file) => {
+    const res = await createDocument({
+      chat_id: selectedChat,
+      name: file.name,
+      url: `local://${file.name}`,
+    });
+
+    if (!res.success) {
+      toast.error(res.message);
+      return;
+    }
+
+    setChatDocuments((prev) => [res.data, ...prev]);
   };
 
-  const deleteDocument = (docId) => {
-    setChatDocuments((prev) => prev.filter((d) => d.id !== docId));
-  };
+  const deleteDocument = async (docId) => {
+    const res = await deleteDocumentAPI(docId);
 
-  const renameDocument = (docId) => {
+    if (!res.success) {
+      toast.error(res.message);
+      return;
+    }
+
     setChatDocuments((prev) =>
-      prev.map((d) => (d.id === docId ? { ...d, name: newName } : d))
+      prev.filter((d) => d._id !== docId)
     );
+  };
+
+  const renameDocument = async (docId) => {
+    const currentDoc = chatDocuments.find((d) => d._id === docId);
+
+    const extension = currentDoc.name.includes(".")
+      ? currentDoc.name.substring(currentDoc.name.lastIndexOf("."))
+      : "";
+
+    const finalName = docNewName.trim() + extension;
+
+    if (!docNewName.trim() || finalName === currentDoc.name) {
+      setEditingDocId(null);
+      setDocNewName("");
+      return;
+    }
+
+    const res = await renameDocumentAPI(docId, finalName);
+
+    if (!res.success) {
+      toast.error(res.message);
+      return;
+    }
+
+    setChatDocuments((prev) =>
+      prev.map((d) =>
+        d._id === docId ? { ...d, name: finalName } : d
+      )
+    );
+
     setEditingDocId(null);
-    setNewName("");
+    setDocNewName("");
   };
   const sendMessage = async () => {
     if (!message.trim()) return;
@@ -236,8 +288,8 @@ const Dashboard = () => {
               {editingChatId === chat._id ? (
                 <TextField
                   size="small"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
+                  value={chatNewName}
+                  onChange={(e) => setChatNewName(e.target.value)}
                   onBlur={() => renameChat(chat._id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -259,7 +311,7 @@ const Dashboard = () => {
                     onClick={(e) => {
                       e.stopPropagation();
                       setEditingChatId(chat._id);
-                      setNewName(chat.name);
+                      setChatNewName(chat.name);
                     }}
                   >
                     <EditIcon fontSize="small" sx={{ color: "#ccc" }} />
@@ -402,7 +454,7 @@ const Dashboard = () => {
           <List>
             {chatDocuments.map((doc) => (
               <Paper
-                key={doc.id}
+                key={doc._id}
                 sx={{
                   p: 1,
                   mb: 1,
@@ -412,30 +464,50 @@ const Dashboard = () => {
                   justifyContent: "space-between",
                 }}
               >
-                {editingDocId === doc.id ? (
+                {editingDocId === doc._id ? (
                   <TextField
                     size="small"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    onBlur={() => renameDocument(doc.id)}
+                    value={docNewName}
+                    onChange={(e) => setDocNewName(e.target.value)}
+                    onBlur={() => renameDocument(doc._id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        renameDocument(doc._id);
+                      }
+                    }}
                     autoFocus
                   />
                 ) : (
                   <>
-                    <Typography variant="body2">{doc.name}</Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        maxWidth: 145,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {doc.name}
+                    </Typography>
                     <Box>
                       <IconButton
                         size="small"
                         onClick={() => {
-                          setEditingDocId(doc.id);
-                          setNewName(doc.name);
+                          setEditingDocId(doc._id);
+                          const nameWithoutExt = doc.name.includes(".")
+                            ? doc.name.substring(0, doc.name.lastIndexOf("."))
+                            : doc.name;
+
+                          setDocNewName(nameWithoutExt);
                         }}
                       >
                         <EditIcon fontSize="small" />
                       </IconButton>
                       <IconButton
                         size="small"
-                        onClick={() => deleteDocument(doc.id)}
+                        onClick={() => deleteDocument(doc._id)}
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
