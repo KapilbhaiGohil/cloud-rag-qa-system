@@ -1,6 +1,7 @@
 from db.client import db
 from datetime import datetime, timezone
 from bson import ObjectId
+from core.minio import minio_client, BUCKET_NAME
 
 
 def create_chat(username: str, name: str):
@@ -38,6 +39,7 @@ def rename_chat(username: str, chat_id: str, name: str):
     return result.matched_count
 
 
+
 def delete_chat(username: str, chat_id: str):
     obj_id = ObjectId(chat_id)
 
@@ -45,8 +47,23 @@ def delete_chat(username: str, chat_id: str):
         {"_id": obj_id, "user_id": username}
     )
 
-    if result.deleted_count:
-        db.documents.delete_many({"chat_id": obj_id})
-        db.messages.delete_many({"chat_id": obj_id})
+    if not result.deleted_count:
+        return 0
+
+    documents = list(db.documents.find({"chat_id": obj_id}))
+
+    for doc in documents:
+        try:
+            file_url = doc.get("url", "")
+
+            object_name = file_url.split(f"/{BUCKET_NAME}/")[-1]
+
+            minio_client.remove_object(BUCKET_NAME, object_name)
+
+        except Exception as e:
+            print("MinIO delete error:", e)
+
+    db.documents.delete_many({"chat_id": obj_id})
+    db.messages.delete_many({"chat_id": obj_id})
 
     return result.deleted_count

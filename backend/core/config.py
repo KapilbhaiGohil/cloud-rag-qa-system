@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int
     frontend_url: str
     algorithm: str
+    minio_endpoint: str
+    minio_access_key: str
+    minio_secret_key: str
+    minio_bucket_name: str
     
     class Config:
         env_file = ".env"

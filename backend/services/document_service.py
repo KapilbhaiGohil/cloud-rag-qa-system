@@ -2,13 +2,13 @@
 from datetime import datetime, timezone
 from bson import ObjectId
 from db.client import db
-
+from core.minio import minio_client, BUCKET_NAME
 documents_collection = db["documents"]
 
-
-def create_document(chat_id: str, name: str, url: str):
+def create_document(chat_id: str, name: str, url: str, username: str):
     doc = {
         "chat_id": ObjectId(chat_id),
+        "user_id": username,
         "name": name,
         "url": url,
         "created_at": datetime.now(timezone.utc),
@@ -20,7 +20,6 @@ def create_document(chat_id: str, name: str, url: str):
     doc["chat_id"] = str(doc["chat_id"])
 
     return doc
-
 
 def get_documents(chat_id: str):
     docs = list(
@@ -43,8 +42,28 @@ def rename_document(doc_id: str, name: str):
     )
     return result.modified_count
 
-def delete_document(doc_id: str):
-    result = documents_collection.delete_one(
-        {"_id": ObjectId(doc_id)}
-    )
+def delete_document(doc_id: str, username: str):
+    doc = documents_collection.find_one({
+        "_id": ObjectId(doc_id),
+        "user_id": username
+    })
+
+    if not doc:
+        return 0
+
+    try:
+        file_url = doc["url"]
+
+        object_name = file_url.split(f"/{BUCKET_NAME}/")[-1]
+
+        minio_client.remove_object(BUCKET_NAME, object_name)
+
+    except Exception as e:
+        print("MinIO delete error:", e)
+
+    result = documents_collection.delete_one({
+        "_id": ObjectId(doc_id),
+        "user_id": username
+    })
+
     return result.deleted_count

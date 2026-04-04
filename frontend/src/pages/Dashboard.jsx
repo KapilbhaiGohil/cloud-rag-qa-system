@@ -29,7 +29,7 @@ import SendIcon from "@mui/icons-material/Send";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
-  createDocument,
+  uploadDocument,
   getDocuments,
   renameDocument as renameDocumentAPI,
   deleteDocument as deleteDocumentAPI,
@@ -47,6 +47,7 @@ const Dashboard = () => {
   const [chatNewName, setChatNewName] = useState("");
   const [docNewName, setDocNewName] = useState("");
   const [message, setMessage] = useState("");
+  const [uploading, setUploading] = useState(false);
   const chatEndRef = useRef(null);
 
   const currentChat = chats.find((c) => c._id === selectedChat);
@@ -137,12 +138,11 @@ const Dashboard = () => {
     setChatNewName("");
   };
   const addDocument = async (file) => {
-    const res = await createDocument({
-      chat_id: selectedChat,
-      name: file.name,
-      url: `local://${file.name}`,
-    });
+    if (!file) return;
 
+    setUploading(true);
+    const res = await uploadDocument(selectedChat, file);
+    setUploading(false);
     if (!res.success) {
       toast.error(res.message);
       return;
@@ -441,13 +441,17 @@ const Dashboard = () => {
             fullWidth
             startIcon={<UploadFileIcon />}
             component="label"
+            disabled={uploading}
             sx={{ mb: 2 }}
           >
-            Upload
+            {uploading ? "Uploading..." : "Upload"}
             <input
               hidden
               type="file"
-              onChange={(e) => addDocument(e.target.files[0])}
+              onChange={(e) => {
+                addDocument(e.target.files[0]);
+                e.target.value = null;
+              }}
             />
           </Button>
 

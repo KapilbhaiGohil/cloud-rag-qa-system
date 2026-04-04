@@ -49,12 +49,17 @@ const handleError = (error) => {
   };
 };
 
-export const createDocument = async ({ chat_id, name, url }) => {
+
+export const uploadDocument = async (chatId, file) => {
   try {
-    const response = await api.post("/documents", {
-      chat_id,
-      name,
-      url,
+    const formData = new FormData();
+    formData.append("chat_id", chatId);
+    formData.append("file", file);
+
+    const response = await api.post("/documents/upload", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
     });
 
     return response.data;
