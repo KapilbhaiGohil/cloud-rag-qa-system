@@ -46,6 +46,7 @@ def delete_chat(username: str, chat_id: str):
     )
 
     if result.deleted_count:
-        db.documents.delete_many({"chat_id": chat_id})
+        db.documents.delete_many({"chat_id": obj_id})
+        db.messages.delete_many({"chat_id": obj_id})
 
     return result.deleted_count

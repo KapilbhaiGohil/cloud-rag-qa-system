@@ -17,6 +17,8 @@ import {
   renameChat as renameChatAPI,
   deleteChat as deleteChatAPI,
 } from "../services/chatService.js";
+import { useRef } from "react";
+import { createMessage, getMessages } from "../services/messageService";
 import { toast } from "react-hot-toast";
 import { useEffect } from "react";
 import AddIcon from "@mui/icons-material/Add";
@@ -38,7 +40,7 @@ const Dashboard = () => {
   const [editingDocId, setEditingDocId] = useState(null);
   const [newName, setNewName] = useState("");
   const [message, setMessage] = useState("");
-
+  const chatEndRef = useRef(null);
 
   const currentChat = chats.find((c) => c._id === selectedChat);
   useEffect(() => {
@@ -85,12 +87,14 @@ const Dashboard = () => {
     setChatMessages([]);
     setChatDocuments([]);
 
-    // Dummy messages for now
-    const dummyMessages = [
-      { role: "assistant", text: "Hello! This is a dummy message." },
-      { role: "user", text: "Hi there!" },
-    ];
-    setChatMessages(dummyMessages);
+    const res = await getMessages(chatId);
+
+    if (!res.success) {
+      toast.error(res.message);
+      return;
+    }
+
+    setChatMessages(res.data.messages);
 
     // Dummy documents for now
     const dummyDocuments = [
@@ -139,14 +143,51 @@ const Dashboard = () => {
     setEditingDocId(null);
     setNewName("");
   };
-
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!message.trim()) return;
 
-    setChatMessages((prev) => [...prev, { role: "user", text: message }]);
-    setMessage("");
-  };
+    const tempId = Date.now();
 
+    const optimisticMessage = {
+      _id: tempId,
+      role: "user",
+      content: message,
+      isTemp: true,
+    };
+
+    setChatMessages((prev) => [...prev, optimisticMessage]);
+    setMessage("");
+
+    try {
+      const res = await createMessage({
+        chat_id: selectedChat,
+        role: "user",
+        content: optimisticMessage.content,
+      });
+
+      if (!res.success) throw new Error(res.message);
+
+      const { user_message, assistant_message } = res.data;
+
+      setChatMessages((prev) =>
+        prev
+          .map((msg) =>
+            msg._id === tempId ? user_message : msg
+          )
+          .concat(assistant_message)
+      );
+
+    } catch (error) {
+      setChatMessages((prev) =>
+        prev.filter((msg) => msg._id !== tempId)
+      );
+
+      toast.error(error.message || "Failed to send message");
+    }
+  };
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
   return (
     <Box sx={{ display: "flex", height: "100vh", bgcolor: "#f9fafb" }}>
 
@@ -244,7 +285,12 @@ const Dashboard = () => {
         <Button
           startIcon={<LogoutIcon />}
           onClick={logout}
-          sx={{ color: "#ccc" }}
+          sx={{
+            color: "#fff",
+            bgcolor: "#dc2626",
+            mt: 1,
+            "&:hover": { bgcolor: "#b91c1c" },
+          }}
         >
           Logout
         </Button>
@@ -279,10 +325,11 @@ const Dashboard = () => {
                       color: msg.role === "user" ? "#fff" : "#111",
                     }}
                   >
-                    {msg.text}
+                    {msg.content}
                   </Paper>
                 </Box>
               ))}
+              <div ref={chatEndRef} />
             </Box>
 
             {/* INPUT */}
@@ -300,9 +347,11 @@ const Dashboard = () => {
                 placeholder="Type a message..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                sx={{
-                  bgcolor: "#f3f4f6",
-                  borderRadius: 2,
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    sendMessage();
+                  }
                 }}
               />
               <IconButton
