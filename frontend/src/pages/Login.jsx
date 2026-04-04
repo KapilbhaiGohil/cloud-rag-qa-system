@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useEffect } from "react";
 import {
   Box,
   Paper,
@@ -16,6 +17,7 @@ import { toast } from "react-hot-toast";
 
 const Login = () => {
   const { login } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -31,7 +33,11 @@ const Login = () => {
 
     setFieldErrors((prev) => ({ ...prev, [e.target.name]: "" }));
   };
-
+   useEffect(() => {
+    if (user) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, navigate]);
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
