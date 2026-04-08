@@ -3,6 +3,9 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from core.minio import minio_client, BUCKET_NAME
 
+from db.client import qdrant_client, COLLECTION_NAME
+from qdrant_client.models import Filter, FieldCondition, MatchValue
+
 
 def create_chat(username: str, name: str):
     chat = {
@@ -55,13 +58,26 @@ def delete_chat(username: str, chat_id: str):
     for doc in documents:
         try:
             file_url = doc.get("url", "")
-
             object_name = file_url.split(f"/{BUCKET_NAME}/")[-1]
-
             minio_client.remove_object(BUCKET_NAME, object_name)
-
         except Exception as e:
             print("MinIO delete error:", e)
+
+    try:
+        qdrant_client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="chat_id",
+                        match=MatchValue(value=str(chat_id)),
+                    )
+                ]
+            )
+        )
+        print(f"Deleted Qdrant vectors for chat {chat_id}")
+    except Exception as e:
+        print("Qdrant delete error:", e)
 
     db.documents.delete_many({"chat_id": obj_id})
     db.messages.delete_many({"chat_id": obj_id})

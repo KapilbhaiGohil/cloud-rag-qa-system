@@ -1,8 +1,11 @@
-# services/document_service.py
 from datetime import datetime, timezone
 from bson import ObjectId
 from db.client import db
 from core.minio import minio_client, BUCKET_NAME
+
+from db.client import qdrant_client, COLLECTION_NAME
+from qdrant_client.models import Filter, FieldCondition, MatchValue
+
 documents_collection = db["documents"]
 
 def create_document(chat_id: str, name: str, url: str, username: str):
@@ -53,13 +56,26 @@ def delete_document(doc_id: str, username: str):
 
     try:
         file_url = doc["url"]
-
         object_name = file_url.split(f"/{BUCKET_NAME}/")[-1]
-
         minio_client.remove_object(BUCKET_NAME, object_name)
-
     except Exception as e:
         print("MinIO delete error:", e)
+
+    try:
+        qdrant_client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="doc_id",
+                        match=MatchValue(value=str(doc_id)),
+                    )
+                ]
+            )
+        )
+        print(f"Deleted Qdrant vectors for doc {doc_id}")
+    except Exception as e:
+        print("Qdrant delete error:", e)
 
     result = documents_collection.delete_one({
         "_id": ObjectId(doc_id),

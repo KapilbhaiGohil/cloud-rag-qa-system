@@ -1,24 +1,51 @@
-from fastapi import APIRouter, status, Depends
+# api/document.py (Updated)
+from fastapi import APIRouter, status, Depends, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import JSONResponse
 from bson import ObjectId
+from models.document import RenameDocumentRequest
+from services.chunking_service import chunk_text
+from services.embedding_service import store_chunks_in_qdrant
 from core.config import settings
 from core.deps import get_current_user
-from models.document import RenameDocumentRequest
+from core.minio import minio_client, BUCKET_NAME
 from services.document_service import (
     create_document,
     get_documents,
     rename_document,
     delete_document,
 )
-from fastapi import UploadFile, File, Form
-from core.minio import minio_client, BUCKET_NAME
-import uuid
+from services.parser_service import extract_text_from_file
 from services.utility import success_response, error_response
+import uuid
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
+def process_document_background(file_bytes: bytes, filename: str, content_type: str, doc_id: str, chat_id: str):
+    print(f"Starting background processing for: {filename}")
+    
+    # 1. Extract Text
+    extracted_text = extract_text_from_file(file_bytes, filename, content_type)
+    
+    if not extracted_text:
+        print(f"Warning: No text extracted from {filename}")
+        return
+
+    print(f"Successfully extracted {len(extracted_text)} characters from {filename}")
+    
+    # 2. Chunking
+    chunks = chunk_text(extracted_text, max_chunk_size=1000, overlap=200)
+    print(f"Created {len(chunks)} chunks for {filename}")
+    
+    # 3. Embedding & Qdrant Storage
+    print(f"Embedding and storing {len(chunks)} chunks...")
+    store_chunks_in_qdrant(chunks, doc_id, chat_id)
+    
+    print(f"Finished background processing for: {filename}")
+
+
 @router.post("/upload")
-def upload_document(
+async def upload_document(
+    background_tasks: BackgroundTasks,
     chat_id: str = Form(...),
     file: UploadFile = File(...),
     username: str = Depends(get_current_user)
@@ -31,8 +58,11 @@ def upload_document(
             content=error_response("Invalid chat id")
         )
 
-    object_name = f"{username}/{chat_id}/{uuid.uuid4()}_{file.filename}"
+    file_bytes = await file.read()
+    
+    await file.seek(0)
 
+    object_name = f"{username}/{chat_id}/{uuid.uuid4()}_{file.filename}"
     minio_client.put_object(
         BUCKET_NAME,
         object_name,
@@ -46,7 +76,16 @@ def upload_document(
 
     doc = create_document(chat_id, file.filename, file_url, username)
 
-    return success_response("Document uploaded", doc)
+    background_tasks.add_task(
+        process_document_background,
+        file_bytes,
+        file.filename,
+        file.content_type,
+        doc["_id"],
+        chat_id
+    )
+
+    return success_response("Document uploaded and processing started", doc)
 
 @router.get("/{chat_id}")
 def get_docs(chat_id: str, username: str = Depends(get_current_user)):
