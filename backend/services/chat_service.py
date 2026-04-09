@@ -23,7 +23,9 @@ def create_chat(username: str, name: str):
 
 
 def get_chats(username: str):
-    chats = list(db.chats.find({"user_id": username}))
+    chats = list(
+        db.chats.find({"user_id": username}).sort("created_at", -1)
+    )
 
     for c in chats:
         c["_id"] = str(c["_id"])

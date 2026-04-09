@@ -14,16 +14,15 @@ def create_document(chat_id: str, name: str, url: str, username: str):
         "user_id": username,
         "name": name,
         "url": url,
+        "status": "processing",
         "created_at": datetime.now(timezone.utc),
     }
 
     result = documents_collection.insert_one(doc)
-
     doc["_id"] = str(result.inserted_id)
     doc["chat_id"] = str(doc["chat_id"])
 
     return doc
-
 def get_documents(chat_id: str):
     docs = list(
         documents_collection
@@ -83,3 +82,9 @@ def delete_document(doc_id: str, username: str):
     })
 
     return result.deleted_count
+
+def update_document_status(doc_id: str, status: str):
+    documents_collection.update_one(
+        {"_id": ObjectId(doc_id)},
+        {"$set": {"status": status}}
+    )

@@ -13,6 +13,7 @@ from services.document_service import (
     get_documents,
     rename_document,
     delete_document,
+    update_document_status,
 )
 from services.parser_service import extract_text_from_file
 from services.utility import success_response, error_response
@@ -23,25 +24,41 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 def process_document_background(file_bytes: bytes, filename: str, content_type: str, doc_id: str, chat_id: str):
     print(f"Starting background processing for: {filename}")
     
-    # 1. Extract Text
-    extracted_text = extract_text_from_file(file_bytes, filename, content_type)
-    
-    if not extracted_text:
-        print(f"Warning: No text extracted from {filename}")
-        return
+    try:
+        # 1. Extract Text
+        extracted_text = extract_text_from_file(file_bytes, filename, content_type)
+        
+        if not extracted_text:
+            print(f"Warning: No text extracted from {filename}")
+            update_document_status(doc_id, "failed")
+            return
 
-    print(f"Successfully extracted {len(extracted_text)} characters from {filename}")
-    
-    # 2. Chunking
-    chunks = chunk_text(extracted_text, max_chunk_size=1000, overlap=200)
-    print(f"Created {len(chunks)} chunks for {filename}")
-    
-    # 3. Embedding & Qdrant Storage
-    print(f"Embedding and storing {len(chunks)} chunks...")
-    store_chunks_in_qdrant(chunks, doc_id, chat_id)
-    
-    print(f"Finished background processing for: {filename}")
+        # 2. Chunking
+        chunks = chunk_text(extracted_text, max_chunk_size=1000, overlap=200)
+        
+        # 3. Embedding & Qdrant Storage
+        store_chunks_in_qdrant(chunks, doc_id, chat_id)
+        
+        # 4. Success! Mark as ready
+        update_document_status(doc_id, "ready")
+        print(f"Finished background processing for: {filename}")
+        
+    except Exception as e:
+        print(f"CRITICAL ERROR processing {filename}: {e}")
+        update_document_status(doc_id, "failed")
 
+ALLOWED_MIME_TYPES = [
+    "application/pdf",
+    "text/plain",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", # DOCX
+    "application/vnd.ms-powerpoint",  # PPT
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",  # PPTX
+    "image/jpeg",
+    "image/png",
+    "image/webp"
+]
+MAX_FILE_SIZE_MB = 10
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
 @router.post("/upload")
 async def upload_document(
@@ -58,7 +75,19 @@ async def upload_document(
             content=error_response("Invalid chat id")
         )
 
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        return JSONResponse(
+            status_code=400,
+            content=error_response(f"Invalid file type. Only PDFs, Word docs, TXT, and images are allowed.")
+        )
+
     file_bytes = await file.read()
+    
+    if len(file_bytes) > MAX_FILE_SIZE_BYTES:
+        return JSONResponse(
+            status_code=400,
+            content=error_response(f"File is too large. Maximum allowed size is {MAX_FILE_SIZE_MB}MB.")
+        )
     
     await file.seek(0)
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import { Box, Typography, IconButton, TextField, Paper, Fab, Zoom } from "@mui/material";
+import { Box, Typography, IconButton, TextField, Paper, Fab, Zoom, CircularProgress } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,6 +15,7 @@ const ChatArea = ({
   sendMessage,
   chatEndRef,
   isTyping,
+  isFetchingChatData,
 }) => {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollContainerRef = useRef(null);
@@ -50,134 +51,143 @@ const ChatArea = ({
             }}
           >
             <Box sx={{ width: "100%", maxWidth: 800 }}>
-              {chatMessages.length === 0 && !isTyping && (
-                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", mt: 10, textAlign: "center" }}>
-                  <Typography variant="h5" sx={{ color: "#1f1f1f", fontWeight: 500, mb: 4 }}>
-                    What's on your mind?
-                  </Typography>
-                  <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center", maxWidth: 600 }}>
-                    {["Summarize my documents", "Help me write an email", "Brainstorm some ideas", "Explain a complex topic"].map((prompt, index) => (
-                      <Paper
-                        key={index}
-                        elevation={0}
-                        onClick={() => setMessage(prompt)}
-                        sx={{
-                          p: 2,
-                          px: 3,
-                          bgcolor: "#ffffff",
-                          border: "1px solid #e3e3e3",
-                          borderRadius: "16px",
-                          cursor: "pointer",
-                          transition: "all 0.2s",
-                          "&:hover": { bgcolor: "#f0f4f9", borderColor: "#c4c7c5" }
-                        }}
-                      >
-                        <Typography variant="body2" sx={{ color: "#444746", fontWeight: 500 }}>
-                          {prompt}
-                        </Typography>
-                      </Paper>
-                    ))}
-                  </Box>
-                </Box>
-              )}
-              {chatMessages.map((msg) => (
-                <Box
-                  key={msg._id}
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: msg.role === "user" ? "flex-end" : "flex-start",
-                    animation: msg.isTemp ? "messagePulse 1.5s infinite ease-in-out" : "none",
-                    "@keyframes messagePulse": {
-                      "0%, 100%": { opacity: 0.4 },
-                      "50%": { opacity: 0.8 },
-                    },
-                    "&:hover .msg-action-btn": { opacity: 1 },
-                  }}
-                >
-                  <Box
-                    sx={{
-                      maxWidth: msg.role === "user" ? "80%" : "100%",
-                      px: msg.role === "user" ? 3 : 1,
-                      py: msg.role === "user" ? 1.5 : 0,
-                      borderRadius: msg.role === "user" ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
-                      bgcolor: msg.role === "user" ? "#f0f4f9" : "transparent",
-                      color: "#1f1f1f",
-                      wordBreak: "break-word",
-                      fontSize: "1rem",
-                      lineHeight: 1.6,
 
-                      "& pre": {
-                        borderRadius: "12px",
-                        overflowX: "auto",
-                        maxWidth: "100%",
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-word",
-                        bgcolor: "#f0f4f9",
-                        mt: 1,
-                        border: "1px solid #e3e3e3",
-                      },
-                      "& code": {
-                        backgroundColor: "#f0f4f9",
-                        padding: "2px 6px",
-                        borderRadius: "6px",
-                        fontFamily: "'Roboto Mono', monospace",
-                        fontSize: "0.85rem",
-                        color: "#1f1f1f"
-                      },
-                      "& p": { margin: "0 0 12px 0", "&:last-child": { mb: 0 } },
-                    }}
-                  >
-                    {msg.role === "assistant" ? (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight]}
-                        components={{
-                          pre: CustomPre
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    ) : (
-                      msg.content
-                    )}
-                  </Box>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      mt: 0.5,
-                      flexDirection: msg.role === "user" ? "row-reverse" : "row"
-                    }}
-                  >
-                    <MessageCopyButton text={msg.content} />
-                  </Box>
+              {isFetchingChatData ? (
+                <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
+                  <CircularProgress size={40} sx={{ color: "#1a73e8" }} />
                 </Box>
-              ))}
-
-              {isTyping && (
-                <Box sx={{ display: "flex", justifyContent: "flex-start", mb: 3 }}>
-                  <Box sx={{ px: 1, py: 1.5, display: "flex", gap: 0.8, alignItems: "center", height: "24px" }}>
-                    {[0, 1, 2].map((i) => (
+              ) : (
+                <>
+                  {chatMessages.length === 0 && !isTyping && (
+                    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", mt: 10, textAlign: "center" }}>
+                      <Typography variant="h5" sx={{ color: "#1f1f1f", fontWeight: 500, mb: 4 }}>
+                        What's on your mind?
+                      </Typography>
+                      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center", maxWidth: 600 }}>
+                        {["Summarize my documents", "Help me write an email", "Brainstorm some ideas", "Explain a complex topic"].map((prompt, index) => (
+                          <Paper
+                            key={index}
+                            elevation={0}
+                            onClick={() => setMessage(prompt)}
+                            sx={{
+                              p: 2,
+                              px: 3,
+                              bgcolor: "#ffffff",
+                              border: "1px solid #e3e3e3",
+                              borderRadius: "16px",
+                              cursor: "pointer",
+                              transition: "all 0.2s",
+                              "&:hover": { bgcolor: "#f0f4f9", borderColor: "#c4c7c5" }
+                            }}
+                          >
+                            <Typography variant="body2" sx={{ color: "#444746", fontWeight: 500 }}>
+                              {prompt}
+                            </Typography>
+                          </Paper>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                  {chatMessages.map((msg) => (
+                    <Box
+                      key={msg._id}
+                      sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: msg.role === "user" ? "flex-end" : "flex-start",
+                        animation: msg.isTemp ? "messagePulse 1.5s infinite ease-in-out" : "none",
+                        "@keyframes messagePulse": {
+                          "0%, 100%": { opacity: 0.4 },
+                          "50%": { opacity: 0.8 },
+                        },
+                        "&:hover .msg-action-btn": { opacity: 1 },
+                      }}
+                    >
                       <Box
-                        key={i}
                         sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          bgcolor: "#a8c7fa",
-                          animation: "pulse 1.4s infinite ease-in-out both",
-                          animationDelay: `${i * 0.16}s`,
-                          "@keyframes pulse": {
-                            "0%, 80%, 100%": { transform: "scale(0.6)", opacity: 0.4 },
-                            "40%": { transform: "scale(1)", opacity: 1 },
+                          maxWidth: msg.role === "user" ? "80%" : "100%",
+                          px: msg.role === "user" ? 3 : 1,
+                          py: msg.role === "user" ? 1.5 : 0,
+                          borderRadius: msg.role === "user" ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
+                          bgcolor: msg.role === "user" ? "#f0f4f9" : "transparent",
+                          color: "#1f1f1f",
+                          wordBreak: "break-word",
+                          fontSize: "1rem",
+                          lineHeight: 1.6,
+
+                          "& pre": {
+                            borderRadius: "12px",
+                            overflowX: "auto",
+                            maxWidth: "100%",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            bgcolor: "#f0f4f9",
+                            mt: 1,
+                            border: "1px solid #e3e3e3",
                           },
+                          "& code": {
+                            backgroundColor: "#f0f4f9",
+                            padding: "2px 6px",
+                            borderRadius: "6px",
+                            fontFamily: "'Roboto Mono', monospace",
+                            fontSize: "0.85rem",
+                            color: "#1f1f1f"
+                          },
+                          "& p": { margin: "0 0 12px 0", "&:last-child": { mb: 0 } },
                         }}
-                      />
-                    ))}
-                  </Box>
-                </Box>
+                      >
+                        {msg.role === "assistant" ? (
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeHighlight]}
+                            components={{
+                              pre: CustomPre
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                        ) : (
+                          msg.content
+                        )}
+                      </Box>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          mt: 0.5,
+                          flexDirection: msg.role === "user" ? "row-reverse" : "row"
+                        }}
+                      >
+                        <MessageCopyButton text={msg.content} />
+                      </Box>
+                    </Box>
+                  ))}
+
+                  {isTyping && (
+                    <Box sx={{ display: "flex", justifyContent: "flex-start", mb: 3 }}>
+                      <Box sx={{ px: 1, py: 1.5, display: "flex", gap: 0.8, alignItems: "center", height: "24px" }}>
+                        {[0, 1, 2].map((i) => (
+                          <Box
+                            key={i}
+                            sx={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: "50%",
+                              bgcolor: "#a8c7fa",
+                              animation: "pulse 1.4s infinite ease-in-out both",
+                              animationDelay: `${i * 0.16}s`,
+                              "@keyframes pulse": {
+                                "0%, 80%, 100%": { transform: "scale(0.6)", opacity: 0.4 },
+                                "40%": { transform: "scale(1)", opacity: 1 },
+                              },
+                            }}
+                          />
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                </>
               )}
               <div ref={chatEndRef} />
             </Box>
@@ -224,12 +234,13 @@ const ChatArea = ({
             >
               <TextField
                 fullWidth
-                placeholder="Ask Gemini..."
+                placeholder="Ask ..."
                 variant="standard"
                 InputProps={{ disableUnderline: true }}
                 multiline
                 maxRows={5}
                 value={message}
+                disabled={isTyping || isFetchingChatData}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -248,7 +259,7 @@ const ChatArea = ({
               />
               <IconButton
                 onClick={sendMessage}
-                disabled={!message.trim()}
+                disabled={!message.trim() || isTyping || isFetchingChatData}
                 sx={{
                   ml: 1,
                   bgcolor: message.trim() ? "#d3e3fd" : "transparent",
@@ -257,7 +268,7 @@ const ChatArea = ({
                   "&:hover": { bgcolor: message.trim() ? "#c2d7fa" : "transparent" },
                 }}
               >
-                <SendIcon fontSize="small" />
+                {isTyping ? <CircularProgress size={20} color="inherit" /> : <SendIcon fontSize="small" />}
               </IconButton>
             </Paper>
           </Box>
