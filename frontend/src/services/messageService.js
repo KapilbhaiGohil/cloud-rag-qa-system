@@ -49,17 +49,35 @@ const handleError = (error) => {
   };
 };
 
-export const createMessage = async ({ chat_id, role, content }) => {
-  try {
-    const response = await api.post("/messages", {
-      chat_id,
-      role,
-      content,
-    });
+export const createMessageStream = async ({ chat_id, content, role }, onChunk) => {
+  const user = JSON.parse(localStorage.getItem("user"));
+  const token = user?.access_token || "";
 
-    return response.data;
-  } catch (error) {
-    return handleError(error);
+  const response = await fetch(`${API_URL}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    },
+    body: JSON.stringify({ chat_id, content ,role})
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to send message");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    const chunkText = decoder.decode(value, { stream: true });
+    if (chunkText) {
+      onChunk(chunkText); 
+    }
   }
 };
 

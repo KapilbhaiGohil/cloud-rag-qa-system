@@ -8,7 +8,7 @@ import {
   renameChat as renameChatAPI,
   deleteChat as deleteChatAPI,
 } from "../services/chatService.js";
-import { createMessage, getMessages } from "../services/messageService";
+import { createMessageStream, getMessages } from "../services/messageService";
 import {
   uploadDocument,
   getDocuments,
@@ -221,36 +221,63 @@ const Dashboard = () => {
   const sendMessage = async () => {
     if (!message.trim()) return;
 
-    const tempId = Date.now();
-    const optimisticMessage = {
-      _id: tempId,
+    const tempUserId = Date.now();
+    const tempAssistantId = tempUserId + 1;
+
+    const optimisticUserMessage = {
+      _id: tempUserId,
       role: "user",
       content: message,
-      created_at: new Date(),
+      created_at: new Date().toISOString(),
       isTemp: true,
     };
 
-    setChatMessages((prev) => [...prev, optimisticMessage]);
+    const optimisticAssistantMessage = {
+      _id: tempAssistantId,
+      role: "assistant",
+      content: "",
+      created_at: new Date().toISOString(),
+      isTemp: true, 
+    };
+
+    setChatMessages((prev) => [...prev, optimisticUserMessage, optimisticAssistantMessage]);
     setMessage("");
     setIsTyping(true);
 
     try {
-      const res = await createMessage({
-        chat_id: selectedChat,
-        role: "user",
-        content: optimisticMessage.content,
-      });
-
-      if (!res.success) throw new Error(res.message);
-
-      const { user_message, assistant_message } = res.data;
-      setChatMessages((prev) =>
-        prev
-          .map((msg) => (msg._id === tempId ? user_message : msg))
-          .concat(assistant_message)
+      await createMessageStream(
+        { chat_id: selectedChat, content: optimisticUserMessage.content, role: "user" },
+        (chunkText) => {
+          setChatMessages((prev) => {
+            const updatedMessages = [...prev];
+            const lastIndex = updatedMessages.length - 1;
+            
+            updatedMessages[lastIndex] = {
+              ...updatedMessages[lastIndex],
+              content: updatedMessages[lastIndex].content + chunkText,
+            };
+            
+            return updatedMessages;
+          });
+        }
       );
+
+      setChatMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === tempUserId || msg._id === tempAssistantId
+            ? { ...msg, isTemp: false }
+            : msg
+        )
+      );
+
+      const res = await getMessages(selectedChat);
+      if (res.success) {
+        setChatMessages(res.data.messages);
+      }
+
     } catch (error) {
-      setChatMessages((prev) => prev.filter((msg) => msg._id !== tempId));
+      console.error(error);
+      setChatMessages((prev) => prev.filter((msg) => msg._id !== tempUserId && msg._id !== tempAssistantId));
       toast.error(error.message || "Failed to send message");
     } finally {
       setIsTyping(false);

@@ -12,38 +12,37 @@ You are a helpful, respectful, and honest AI assistant. Provide clear, concise, 
 
 def build_prompt(user_input: str, chat_history: str = "", doc_context: str = "") -> str:
     prompt = ""
-    
     if doc_context:
         prompt += f"### Additional Context:\n{doc_context}\n\n"
-        
     if chat_history:
         prompt += f"### Conversation History:\n{chat_history}\n\n"
-        
     prompt += f"User: {user_input}\nAssistant:"
-    
     return prompt
 
-def generate_reply(
+def generate_reply_stream(
     user_message: str, 
     chat_history: str = "", 
     doc_context: str = "", 
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
-) -> str:
+):
     try:
         prompt = build_prompt(user_message, chat_history, doc_context)
         
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
-            temperature=0.7, # (0.0 for strict facts, up to 2.0 for highly creative)
+            temperature=0.7,
         )
         
-        response = client.models.generate_content(
+        response = client.models.generate_content_stream(
             model=MODEL,
             contents=prompt,
             config=config
         )
-        return response.text.strip()
         
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
+                
     except Exception as e:
-        print("Gemini Error:", e)
-        return "Sorry, something went wrong."
+        print("Gemini Stream Error:", e)
+        yield "Sorry, something went wrong while generating the response."

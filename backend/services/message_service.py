@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import time
 from bson import ObjectId
 from services.embedding_service import retrieve_relevant_chunks
-from services.gemini_service import generate_reply
+from services.gemini_service import generate_reply_stream
 from db.client import db
 
 messages_collection = db["messages"]
@@ -21,40 +21,36 @@ def get_messages(chat_id: str):
             msg["created_at"] = msg["created_at"].replace(tzinfo=timezone.utc).isoformat()
     return messages
 
-def create_message_with_reply(username: str, chat_id: str, content: str):
+def create_message_with_reply_stream(username: str, chat_id: str, content: str):
     user_message = {
         "chat_id": ObjectId(chat_id),
         "role": "user",
         "content": content,
         "created_at": datetime.now(timezone.utc),
     }
-    user_result = messages_collection.insert_one(user_message)
-    user_message["_id"] = str(user_result.inserted_id)
-    user_message["chat_id"] = str(user_message["chat_id"])
+    messages_collection.insert_one(user_message)
     
     previous_messages = get_messages(chat_id)
     chat_history = ""
     for msg in previous_messages:
-        if str(msg["_id"]) != str(user_message["_id"]):
+        # Don't include the message that just inserted
+        if str(msg.get("_id")) != str(user_message.get("_id")):
             role = "User" if msg["role"] == "user" else "Assistant"
             chat_history += f"{role}: {msg['content']}\n"
 
     print(f"Searching Qdrant for: {content}")
     doc_context = retrieve_relevant_chunks(content, chat_id)
 
-    assistant_text = generate_reply(content, chat_history, doc_context)
+    assistant_text = ""
+    for chunk in generate_reply_stream(content, chat_history, doc_context):
+        assistant_text += chunk
+        yield chunk
 
-    assistant_message = {
-        "chat_id": ObjectId(chat_id),
-        "role": "assistant",
-        "content": assistant_text,
-        "created_at": datetime.now(timezone.utc),
-    }
-    assistant_result = messages_collection.insert_one(assistant_message)
-    assistant_message["_id"] = str(assistant_result.inserted_id)
-    assistant_message["chat_id"] = str(assistant_message["chat_id"])
-
-    return {
-        "user_message": user_message,
-        "assistant_message": assistant_message,
-    }
+    if assistant_text.strip():
+        assistant_message = {
+            "chat_id": ObjectId(chat_id),
+            "role": "assistant",
+            "content": assistant_text,
+            "created_at": datetime.now(timezone.utc),
+        }
+        messages_collection.insert_one(assistant_message)

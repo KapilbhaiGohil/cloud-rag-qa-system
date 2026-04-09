@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from bson import ObjectId
 
 from core.deps import get_current_user
 from models.message import CreateMessageRequest
-from services.message_service import create_message_with_reply, get_messages
+from services.message_service import create_message_with_reply_stream, get_messages
 from services.utility import success_response, error_response
 
 router = APIRouter(prefix="/messages", tags=["messages"])
@@ -24,14 +24,10 @@ def create_message_api(
                 {"chat_id": "Invalid ObjectId format"}
             )
         )
-
-    data = create_message_with_reply(
-        username,
-        req.chat_id,
-        req.content
+    return StreamingResponse(
+        create_message_with_reply_stream(username, req.chat_id, req.content),
+        media_type="text/plain"
     )
-
-    return success_response("Message created", data)
 
 @router.get("/{chat_id}")
 def get_messages_api(

@@ -95,11 +95,6 @@ const ChatArea = ({
                         display: "flex",
                         flexDirection: "column",
                         alignItems: msg.role === "user" ? "flex-end" : "flex-start",
-                        animation: msg.isTemp ? "messagePulse 1.5s infinite ease-in-out" : "none",
-                        "@keyframes messagePulse": {
-                          "0%, 100%": { opacity: 0.4 },
-                          "50%": { opacity: 0.8 },
-                        },
                         "&:hover .msg-action-btn": { opacity: 1 },
                       }}
                     >
@@ -159,7 +154,7 @@ const ChatArea = ({
                           flexDirection: msg.role === "user" ? "row-reverse" : "row"
                         }}
                       >
-                        <MessageCopyButton text={msg.content} />
+                        {!msg.isTemp && <MessageCopyButton text={msg.content} />}
                       </Box>
                     </Box>
                   ))}
@@ -198,7 +193,7 @@ const ChatArea = ({
               onClick={scrollToBottom}
               sx={{
                 position: "absolute",
-                bottom: 90, // Places it comfortably above the text input
+                bottom: 90,
                 left: "50%",
                 transform: "translateX(-50%)",
                 bgcolor: "rgba(255, 255, 255, 0.9)",
