@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import StopIcon from "@mui/icons-material/Stop";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import { Box, Typography, IconButton, TextField, Paper, Fab, Zoom, CircularProgress } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
@@ -16,9 +17,20 @@ const ChatArea = ({
   chatEndRef,
   isTyping,
   isFetchingChatData,
+  stopResponse,
 }) => {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollContainerRef = useRef(null);
+  useEffect(() => {
+    setShowScrollButton(false);
+  }, [currentChat?._id]);
+  useEffect(() => {
+    if (!showScrollButton) {
+      setTimeout(() => {
+        scrollToBottom();
+      }, 50);
+    }
+  }, [chatMessages, isTyping, isFetchingChatData]);
   const handleScroll = () => {
     if (scrollContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
@@ -132,18 +144,35 @@ const ChatArea = ({
                         }}
                       >
                         {msg.role === "assistant" ? (
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[rehypeHighlight]}
-                            components={{
-                              pre: CustomPre
-                            }}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
+                          <>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              rehypePlugins={[rehypeHighlight]}
+                              components={{
+                                pre: CustomPre
+                              }}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                            {msg.is_aborted && (
+                              <Typography variant="caption"
+                                sx={{
+                                  display: "inline-block",
+                                  color: "#444746",
+                                  borderRadius: "16px",
+                                  fontSize: "0.8rem",
+                                  fontWeight: 500,
+                                  userSelect: "none",
+                                  fontStyle: "italic",
+                                }}
+                              >
+                                You stopped this response
+                              </Typography>
+                            )}</>
                         ) : (
                           msg.content
                         )}
+
                       </Box>
                       <Box
                         sx={{
@@ -235,12 +264,17 @@ const ChatArea = ({
                 multiline
                 maxRows={5}
                 value={message}
-                disabled={isTyping || isFetchingChatData}
+                disabled={isFetchingChatData}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    sendMessage();
+                    if (!isTyping) {
+                      sendMessage();
+                      scrollToBottom();
+                    } else {
+                      stopResponse();
+                    }
                   }
                 }}
                 sx={{
@@ -253,17 +287,17 @@ const ChatArea = ({
                 }}
               />
               <IconButton
-                onClick={sendMessage}
-                disabled={!message.trim() || isTyping || isFetchingChatData}
+                onClick={isTyping ? stopResponse : sendMessage}
+                disabled={(!message.trim() && !isTyping) || isFetchingChatData}
                 sx={{
                   ml: 1,
-                  bgcolor: message.trim() ? "#d3e3fd" : "transparent",
-                  color: message.trim() ? "#041e49" : "#444746",
+                  bgcolor: message.trim() || isTyping ? "#d3e3fd" : "transparent",
+                  color: message.trim() || isTyping ? "#041e49" : "#444746",
                   transition: "all 0.2s",
-                  "&:hover": { bgcolor: message.trim() ? "#c2d7fa" : "transparent" },
+                  "&:hover": { bgcolor: message.trim() || isTyping ? "#c2d7fa" : "transparent" },
                 }}
               >
-                {isTyping ? <CircularProgress size={20} color="inherit" /> : <SendIcon fontSize="small" />}
+                {isTyping ? <StopIcon fontSize="small" /> : <SendIcon fontSize="small" />}
               </IconButton>
             </Paper>
           </Box>
@@ -274,8 +308,9 @@ const ChatArea = ({
             How can I help you today?
           </Typography>
         </Box>
-      )}
-    </Box>
+      )
+      }
+    </Box >
   );
 };
 

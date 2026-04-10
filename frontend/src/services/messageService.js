@@ -48,36 +48,43 @@ const handleError = (error) => {
     errors: {},
   };
 };
-
-export const createMessageStream = async ({ chat_id, content, role }, onChunk) => {
+export const createMessageStream = async ({ chat_id, content, role }, onIdReceived, onChunk,signal) => {
   const user = JSON.parse(localStorage.getItem("user"));
   const token = user?.access_token || "";
 
   const response = await fetch(`${API_URL}/messages`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`
-    },
-    body: JSON.stringify({ chat_id, content ,role})
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+    body: JSON.stringify({ chat_id, content, role }),
+    signal : signal
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || "Failed to send message");
-  }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8");
+  let isFirstChunk = true;
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    
-    const chunkText = decoder.decode(value, { stream: true });
-    if (chunkText) {
-      onChunk(chunkText); 
+    const text = decoder.decode(value);
+
+    if (isFirstChunk && text.startsWith("MSG_ID:")) {
+      const [idPart, ...rest] = text.split("\n");
+      const ids = idPart.replace("MSG_ID:", "").split(",");
+      onIdReceived(ids[0], ids[1]);
+      if (rest.join("\n")) onChunk(rest.join("\n"));
+      isFirstChunk = false;
+    } else {
+      onChunk(text);
     }
+  }
+};
+
+export const reportAbort = async (messageId, content) => {
+  try {
+    await api.patch(`/messages/${messageId}/abort`, { content });
+  } catch (err) {
+    console.error("Failed to report abort", err);
   }
 };
 

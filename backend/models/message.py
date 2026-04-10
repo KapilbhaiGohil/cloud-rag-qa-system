@@ -15,3 +15,6 @@ class MessageInDB(BaseModel):
     role: str
     content: str
     created_at: datetime
+    
+class AbortRequest(BaseModel):
+    content: str

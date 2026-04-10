@@ -28,15 +28,29 @@ def create_message_with_reply_stream(username: str, chat_id: str, content: str):
         "content": content,
         "created_at": datetime.now(timezone.utc),
     }
-    messages_collection.insert_one(user_message)
+    user_result = messages_collection.insert_one(user_message)
+    user_id = str(user_result.inserted_id)
+    
+    assistant_placeholder = {
+        "chat_id": ObjectId(chat_id),
+        "role": "assistant",
+        "content": "",
+        "is_aborted": True,
+        "created_at": datetime.now(timezone.utc),
+    }
+    result = messages_collection.insert_one(assistant_placeholder)
+    assistant_id = str(result.inserted_id)
+    
+    yield f"MSG_ID:{user_id},{assistant_id}\n"
     
     previous_messages = get_messages(chat_id)
     chat_history = ""
     for msg in previous_messages:
-        # Don't include the message that just inserted
         if str(msg.get("_id")) != str(user_message.get("_id")):
             role = "User" if msg["role"] == "user" else "Assistant"
             chat_history += f"{role}: {msg['content']}\n"
+            if(msg.get("is_aborted", False)):
+                chat_history += "[This response was stopped by the user]\n"
 
     print(f"Searching Qdrant for: {content}")
     doc_context = retrieve_relevant_chunks(content, chat_id)
@@ -46,11 +60,13 @@ def create_message_with_reply_stream(username: str, chat_id: str, content: str):
         assistant_text += chunk
         yield chunk
 
-    if assistant_text.strip():
-        assistant_message = {
-            "chat_id": ObjectId(chat_id),
-            "role": "assistant",
-            "content": assistant_text,
-            "created_at": datetime.now(timezone.utc),
-        }
-        messages_collection.insert_one(assistant_message)
+    messages_collection.update_one(
+        {"_id": ObjectId(assistant_id)},
+        {"$set": {"content": assistant_text, "is_aborted": False}}
+    )
+    
+def update_aborted_message(message_id: str, content: str):
+    messages_collection.update_one(
+        {"_id": ObjectId(message_id)},
+        {"$set": {"content": content, "is_aborted": True}}
+    )

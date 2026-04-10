@@ -8,7 +8,7 @@ import {
   renameChat as renameChatAPI,
   deleteChat as deleteChatAPI,
 } from "../services/chatService.js";
-import { createMessageStream, getMessages } from "../services/messageService";
+import { createMessageStream, getMessages, reportAbort } from "../services/messageService";
 import {
   uploadDocument,
   getDocuments,
@@ -39,6 +39,8 @@ const Dashboard = () => {
   const [isFetchingChats, setIsFetchingChats] = useState(true);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [isFetchingChatData, setIsFetchingChatData] = useState(false);
+  const abortControllerRef = useRef(null);
+  const currentMsgIdRef = useRef(null);
   const chatEndRef = useRef(null);
 
   const currentChat = chats.find((c) => c._id === selectedChat);
@@ -46,10 +48,6 @@ const Dashboard = () => {
   useEffect(() => {
     fetchChats();
   }, []);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
 
   useEffect(() => {
     const hasProcessingDocs = chatDocuments.some((doc) => doc.status === "processing");
@@ -71,9 +69,9 @@ const Dashboard = () => {
 
 
   const fetchChats = async () => {
-    setIsFetchingChats(true); 
+    setIsFetchingChats(true);
     const res = await getChats();
-    setIsFetchingChats(false); 
+    setIsFetchingChats(false);
 
     if (!res.success) {
       toast.error(res.message);
@@ -86,7 +84,7 @@ const Dashboard = () => {
   const addChat = async () => {
     setIsCreatingChat(true);
     const res = await createChat("New Chat");
-    setIsCreatingChat(false); 
+    setIsCreatingChat(false);
 
     if (!res.success) {
       toast.error(res.message);
@@ -106,7 +104,7 @@ const Dashboard = () => {
     setSelectedChat(chatId);
     setChatMessages([]);
     setChatDocuments([]);
-    setIsFetchingChatData(true); 
+    setIsFetchingChatData(true);
 
     const res = await getMessages(chatId);
     if (!res.success) {
@@ -123,7 +121,7 @@ const Dashboard = () => {
       return;
     }
     setChatDocuments(docsRes.data.documents);
-    setIsFetchingChatData(false); 
+    setIsFetchingChatData(false);
   };
 
   const requestDeleteChat = (id) => setChatToDelete(id);
@@ -134,14 +132,14 @@ const Dashboard = () => {
     const res = await deleteChatAPI(id);
     if (!res.success) {
       toast.error(res.message);
-      setChatToDelete(null); 
+      setChatToDelete(null);
       return;
     }
-    
+
     toast.success("Chat deleted");
     setChats((prev) => prev.filter((c) => c._id !== id));
     if (selectedChat === id) setSelectedChat(null);
-    
+
     setChatToDelete(null);
   };
 
@@ -178,17 +176,17 @@ const Dashboard = () => {
   const confirmDeleteDoc = async () => {
     if (!docToDelete) return;
     const docId = docToDelete;
-    
+
     const res = await deleteDocumentAPI(docId);
     if (!res.success) {
       toast.error(res.message);
       setDocToDelete(null);
       return;
     }
-    
+
     toast.success("Document deleted");
     setChatDocuments((prev) => prev.filter((d) => d._id !== docId));
-    
+
     setDocToDelete(null);
   };
 
@@ -221,6 +219,10 @@ const Dashboard = () => {
   const sendMessage = async () => {
     if (!message.trim()) return;
 
+    abortControllerRef.current = new AbortController();
+    let accumulatedContent = "";
+    let currentUserId = null;
+
     const tempUserId = Date.now();
     const tempAssistantId = tempUserId + 1;
 
@@ -237,7 +239,7 @@ const Dashboard = () => {
       role: "assistant",
       content: "",
       created_at: new Date().toISOString(),
-      isTemp: true, 
+      isTemp: true,
     };
 
     setChatMessages((prev) => [...prev, optimisticUserMessage, optimisticAssistantMessage]);
@@ -246,41 +248,49 @@ const Dashboard = () => {
 
     try {
       await createMessageStream(
-        { chat_id: selectedChat, content: optimisticUserMessage.content, role: "user" },
-        (chunkText) => {
-          setChatMessages((prev) => {
-            const updatedMessages = [...prev];
-            const lastIndex = updatedMessages.length - 1;
-            
-            updatedMessages[lastIndex] = {
-              ...updatedMessages[lastIndex],
-              content: updatedMessages[lastIndex].content + chunkText,
-            };
-            
-            return updatedMessages;
-          });
-        }
+        { chat_id: selectedChat, content: message, role: "user" },
+        (uId, aId) => {
+          currentUserId = uId;
+          currentMsgIdRef.current = aId;
+        },
+        (chunk) => {
+          accumulatedContent += chunk;
+          setChatMessages(prev => prev.map(msg =>
+            msg._id === tempAssistantId
+              ? { ...msg, content: accumulatedContent }
+              : msg
+          ));
+        },
+        abortControllerRef.current.signal
       );
 
-      setChatMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === tempUserId || msg._id === tempAssistantId
-            ? { ...msg, isTemp: false }
-            : msg
-        )
-      );
-
-      const res = await getMessages(selectedChat);
-      if (res.success) {
-        setChatMessages(res.data.messages);
-      }
+      setChatMessages(prev => prev.map(msg => {
+        if (msg._id === tempAssistantId) return { ...msg, _id: currentMsgIdRef.current || msg._id, isTemp: false };
+        if (msg._id === tempUserId) return { ...msg, _id: currentUserId || msg._id, isTemp: false };
+        return msg;
+      }));
 
     } catch (error) {
-      console.error(error);
-      setChatMessages((prev) => prev.filter((msg) => msg._id !== tempUserId && msg._id !== tempAssistantId));
-      toast.error(error.message || "Failed to send message");
+      if (error.name === 'AbortError') {
+        if (currentMsgIdRef.current) {
+          await reportAbort(currentMsgIdRef.current, accumulatedContent);
+        }
+        setChatMessages(prev => prev.map(msg => {
+          if (msg._id === tempAssistantId) return { ...msg, is_aborted: true, isTemp: false };
+          if (msg._id === tempUserId) return { ...msg, _id: currentUserId || msg._id, isTemp: false };
+          return msg;
+        }));
+      } else {
+        console.error("Stream error:", error);
+      }
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const stopResponse = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -315,6 +325,7 @@ const Dashboard = () => {
         chatEndRef={chatEndRef}
         isTyping={isTyping}
         isFetchingChatData={isFetchingChatData}
+        stopResponse={stopResponse}
       />
 
       {/* DOCUMENT PANEL */}
