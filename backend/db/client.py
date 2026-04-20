@@ -3,7 +3,7 @@ from core.config import settings
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 
-COLLECTION_NAME = "chat_documents"
+COLLECTION_NAME = settings.qdrant_collection
 
 try:
     client = MongoClient(settings.mongo_uri)
@@ -12,15 +12,15 @@ try:
     print("MongoDB connected successfully!")
 
     qdrant_client = QdrantClient(
-        host="localhost",
-        port=6333
+        host=settings.qdrant_host,
+        port=settings.qdrant_port
     )
     print("Qdrant connected successfully!")
 
     qdrant_client.create_collection(
         collection_name=COLLECTION_NAME,
         vectors_config=VectorParams(
-            size=3072,
+            size=settings.vector_dimension,
             distance=Distance.COSINE
         )
     )

@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     minio_bucket_name: str
     gemini_api_key: str
     gemini_model: str
+    qdrant_host: str
+    qdrant_port: int
+    qdrant_collection: str
+    vector_dimension: int
     class Config:
         env_file = ".env"
 
