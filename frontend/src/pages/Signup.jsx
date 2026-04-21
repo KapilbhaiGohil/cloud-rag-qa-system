@@ -69,11 +69,11 @@ const Signup = () => {
       return;
     }
 
-    toast.success("Account created successfully 🎉");
+    toast.success("Account created successfully. Redirecting to login...");
 
     setTimeout(() => {
       navigate("/login");
-    }, 1200);
+    }, 1000);
 
     setLoading(false);
   };

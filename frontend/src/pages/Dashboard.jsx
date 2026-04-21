@@ -90,7 +90,7 @@ const Dashboard = () => {
       toast.error(res.message);
       return;
     }
-    toast.success("Chat created");
+    // toast.success("Chat created");
     selectChat(res.data._id);
     setChats((prev) => [res.data, ...prev]);
   };
@@ -136,7 +136,7 @@ const Dashboard = () => {
       return;
     }
 
-    toast.success("Chat deleted");
+    // toast.success("Chat deleted");
     setChats((prev) => prev.filter((c) => c._id !== id));
     if (selectedChat === id) setSelectedChat(null);
 
@@ -149,7 +149,7 @@ const Dashboard = () => {
       toast.error(res.message);
       return;
     }
-    toast.success("Chat renamed");
+    // toast.success("Chat renamed");
     setChats((prev) =>
       prev.map((c) => (c._id === id ? { ...c, name: chatNewName } : c))
     );
@@ -184,7 +184,7 @@ const Dashboard = () => {
       return;
     }
 
-    toast.success("Document deleted");
+    // toast.success("Document deleted");
     setChatDocuments((prev) => prev.filter((d) => d._id !== docId));
 
     setDocToDelete(null);

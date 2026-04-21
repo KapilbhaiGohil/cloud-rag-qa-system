@@ -56,7 +56,7 @@ const Login = () => {
       return;
     }
 
-    toast.success("Logged in successfully");
+    // toast.success("Logged in successfully");
 
     login(res.data);
     navigate("/dashboard");
