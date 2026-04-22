@@ -16,7 +16,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(chat_router)
-app.include_router(auth_router)
-app.include_router(message_router)
-app.include_router(document_router)
+app.include_router(auth_router, prefix="/api")
+app.include_router(chat_router, prefix="/api")
+app.include_router(message_router, prefix="/api")
+app.include_router(document_router, prefix="/api")

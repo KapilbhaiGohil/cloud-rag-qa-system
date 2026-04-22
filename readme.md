@@ -1,0 +1,1 @@
+# For running make sure to create rag-documents bucket inside minio.
