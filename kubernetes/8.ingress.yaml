@@ -22,3 +22,14 @@ spec:
                 name: backend
                 port:
                   number: 8000
+
+    - host: minio.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9001
